@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html>
+    <style>
+        #other-div {
+            display: flex;
+            flex-direction: column;
+            align-items:center;
+            margin: 2vh;
+        }
+        #other-div > p {
+            margin:0.4em
+        }
+        canvas {
+            border: 1px solid black;
+        }
+        #canvas-div {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        
+    </style>
+    <head>
+        <title>Runnergame</title>
+    </head>
+    <body>
+        <div id="other-div">
+            <p>Start the game by pressing the <b>START</b> button</p>
+            <p>Give microphone permission</p>
+            <p>Your goal is to avoid touching the falling block as long as possible</p>
+            <p>Move the green block left by saying "Left" and right by saying "right"</p>
+            <button type="button" onclick="init()">START</button>
+        </div>
+
+        <div id="canvas-div">
+            <canvas width="640", height="480">On</canvas>
+        </div>
+
+    </body>
+</html>
+
+<script>
+    const canvas = document.querySelector("canvas");
+    const ctx = canvas.getContext("2d");
+
+    let secondsPassed;
+    let oldTimeStamp = 0;
+    let fps;
+    let maxFPS = 60;
+    let player;
+    let enemy;
+    let enemySpawned = true;
+    let timePassed = 0;
+    let playerScore = 0;
+    let hiScore = 0;
+    let enemySpeed = 90;
+
+    window.onload = () => {
+        player = new Character(270,350,100,100,"green");
+        enemy = spawnEnemy()
+        window.requestAnimationFrame(loop);      
+    }
+
+
+    class Vector2D {
+        constructor(x,y) {
+            this.x = x || 0.0;
+            this.y = y || 0.0;            
+        }
+    }
+
+    class Character {
+        constructor(posX,posY,sizeX,sizeY,color) {
+            this.position = new Vector2D(posX,posY);
+            this.size = new Vector2D(sizeX,sizeY);
+            this.color = color
+            this.overlapping = false
+            this.oldPosX = posX
+            this.destPosX = posX
+        }
+        /**
+         * 
+         */
+        logPosition() {
+            console.log("pos x: " + this.position.x + " pos y: " + this.position.y)
+        }
+
+        /**
+         * 
+         */
+        checkOverlap(ch2) {
+            if(ch2.position.x > this.size.x + this.position.x || this.position.x > ch2.size.x + ch2.position.x || ch2.position.y > this.size.y + this.position.y || this.position.y > ch2.size.y + ch2.position.y) {
+                return false;
+            }
+            return true
+        }
+
+    }
+
+    // sleep for fps limiting purposes
+    function sleep(ms) {
+        return new Promise(resolve => setTimeout(resolve, ms));
+    }
+
+    async function loop(timeStamp) {
+        // calculate passed time
+        secondsPassed = (timeStamp - oldTimeStamp) / 1000;
+        oldTimeStamp = timeStamp;
+
+        // calculates fps
+        fps = Math.round(1/secondsPassed);
+        // calculate ms for sleep to limit fps
+        let ms_to_sleep = 1000/maxFPS - secondsPassed;
+        
+        
+        // player movement to left
+        if(player.oldPosX > player.destPosX && player.position.x > 140) {
+            timePassed += secondsPassed
+
+            player.position.x = easeInOutQuint(timePassed, player.oldPosX, -130, 1)
+            
+            if( player.position.x < player.destPosX) {
+                player.position.x = player.destPosX
+                player.oldPosX = player.destPosX
+                timePassed = 0
+            } else if (player.position.x == player.destPosX) {
+                player.oldPosX = player.destPosX
+                timePassed = 0
+            }
+        }
+        
+        // player movement to right
+        if(player.oldPosX < player.destPosX && player.position.x < 400) {
+            timePassed += secondsPassed
+
+            player.position.x = easeInOutQuint(timePassed, player.oldPosX, 130, 1)
+            
+            if(player.position.x > player.destPosX) {
+                player.position.x = player.destPosX
+                player.oldPosX = player.destPosX
+                timePassed = 0
+            } else if (player.position.x == player.destPosX) {
+                player.oldPosX = player.destPosX
+                timePassed = 0
+            }
+        }
+
+        
+        // moves enemy
+        enemy.position.y += enemySpeed * secondsPassed
+
+        // check for collision
+        if(enemySpawned == true) {
+            player.overlapping = player.checkOverlap(enemy);
+        }
+        
+        // changes player color if overlapping enemy and resets score
+        if(player.overlapping == true) {
+            player.color = "blue"
+            playerScore = 0
+        } else {
+            player.color = "green"
+        }
+
+        // creates new enemy if old enemy moves outside of canvas and add +1 to score
+        if(enemy.position.y > canvas.height) {
+            enemySpawned = false
+            playerScore += 1
+
+            if(playerScore>hiScore) {
+                hiScore += 1
+            }
+            enemy = spawnEnemy()
+        }
+
+        draw();
+        await sleep(ms_to_sleep);
+        window.requestAnimationFrame(loop)
+    }
+
+
+    // easing function for smooth movement
+    // t is passed time, 0 at start
+    // b is beginning value e.g. x-coordinate
+    // c is change in value e.g. x=100 and destination is x=250 so c=150
+    // d is time you want the movement to take
+    function easeInOutQuint (t, b, c, d) {
+        if ((t /= d / 2) < 1) return c / 2 * t * t * t * t * t + b;
+        return c / 2 * ((t -= 2) * t * t * t * t + 2) + b;
+    }
+
+    // spawns new enemy
+    function spawnEnemy() {
+        enemySpawned = true
+        return new Character(randomLocation(), -100, 100, 100, "red")
+    }
+
+    // returns one of 3 x coordinates to spawn enemy
+    function randomLocation() {
+        let locations = [
+            140,
+            270,
+            400
+        ]
+        let number = Math.floor(Math.random() * 3)
+        return locations[number]
+    }
+
+    function draw() {
+        ctx.clearRect(0,0,canvas.width, canvas.height)
+
+        //fpsmeter
+        ctx.fillStyle = "white";
+        ctx.fillRect(0, 0, 200, 100);
+        ctx.font = '25px Arial';
+        ctx.fillStyle = 'black';
+        ctx.fillText("FPS: " + fps, 5, 30);
+        //fpsmeter
+
+        // score
+        ctx.font = '20px Arial';
+        ctx.fillStyle = 'black';
+        ctx.fillText("SCORE: " + playerScore, 5, 60);
+        // score
+
+        // hiscore
+        ctx.font = '18px Arial';
+        ctx.fillStyle = 'black';
+        ctx.fillText("HISCORE: " + hiScore, 5, 90);
+        // hiscore
+
+        // black stripes
+        ctx.fillStyle = "black"
+        ctx.fillRect(120,0,10,canvas.height)
+        ctx.fillRect(250,0,10,canvas.height)
+        ctx.fillRect(380,0,10,canvas.height)
+        ctx.fillRect(510,0,10,canvas.height)
+        // black stripes
+        
+        // player
+        ctx.fillStyle = player.color
+        ctx.strokeStyle = player.color
+        ctx.beginPath();
+        ctx.roundRect(player.position.x, player.position.y, player.size.x, player.size.y,10)
+        ctx.stroke();
+        ctx.fill();
+        // player
+
+        if(enemySpawned) {
+            ctx.fillStyle = enemy.color
+            ctx.strokeStyle = enemy.color
+            ctx.beginPath();
+            ctx.roundRect(enemy.position.x, enemy.position.y, enemy.size.x, enemy.size.y,10)
+            ctx.stroke();
+            ctx.fill();
+        }
+    }
+
+
+
+
+</script>
+
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@1.3.1/dist/tf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/speech-commands@0.4.0/dist/speech-commands.min.js"></script>
+
+<script type="text/javascript">
+    // more documentation available at
+    // https://github.com/tensorflow/tfjs-models/tree/master/speech-commands
+
+    // the link to your model provided by Teachable Machine export panel
+    //const URL = "https://teachablemachine.withgoogle.com/models/879FeL5l9/";
+    const URL = "https://teachablemachine.withgoogle.com/models/HZeQIRLLL/";
+
+    async function createModel() {
+        const checkpointURL = URL + "model.json"; // model topology
+        const metadataURL = URL + "metadata.json"; // model metadata
+
+        const recognizer = speechCommands.create(
+            "BROWSER_FFT", // fourier transform type, not useful to change
+            undefined, // speech commands vocabulary feature, not useful for your models
+            checkpointURL,
+            metadataURL);
+
+        // check that model and metadata are loaded via HTTPS requests.
+        await recognizer.ensureModelLoaded();
+
+        return recognizer;
+    }
+
+    async function init() {
+        const recognizer = await createModel();
+        const classLabels = recognizer.wordLabels(); // get class labels
+
+        // listen() takes two arguments:
+        // 1. A callback function that is invoked anytime a word is recognized.
+        // 2. A configuration object with adjustable fields
+        recognizer.listen(result => {
+            const scores = result.scores; // probability of prediction for each class
+
+
+
+            if(scores[1] > 0.9)
+                
+                if(player.oldPosX > 140 && player.position.x == player.destPosX && player.oldPosX == player.destPosX) {
+
+                    player.destPosX = player.oldPosX - 130
+                } 
+                /*else {
+                    player.oldPosX = 140
+                    player.destPosX = 140
+                }*/
+                
+                //player.position.x -= 130
+            
+            if (scores[2] > 0.9) {
+                if(player.oldPosX < 400 && player.position.x == player.destPosX && player.oldPosX == player.destPosX) {
+
+                    player.destPosX = player.position.x + 130 
+                } 
+                /*else {
+                    player.oldPosX = 400
+                    player.destPosX = 400
+                }*/
+                
+                //player.position.x += 130
+
+            }
+
+        }, {
+            includeSpectrogram: true, // in case listen should return result.spectrogram
+            probabilityThreshold: 0.75,
+            invokeCallbackOnNoiseAndUnknown: true,
+            overlapFactor: 0.5 // probably want between 0.5 and 0.75. More info in README
+        });
+
+        // Stop the recognition in 5 seconds.
+        // setTimeout(() => recognizer.stopListening(), 5000);
+    }
+</script>
